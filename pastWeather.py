@@ -6,11 +6,18 @@ def pastWeather(year, month, day, latitude, longitude, date_index):
     # Check that data is valid
     if (year is not None and month is not None and day is not None and latitude is not None and longitude is not None) and (latitude > 25 and latitude < 84) and (longitude > -172 and longitude < -52):
         # Make sure wildfire date is in YYYYMMDD format
-        if len(month) == 1:
-            month = '0'+month
-        if len(day) == 1:
-            day = '0'+day
-        date = year+month+day
+        if isinstance(month, str):
+            if len(month) == 1:
+                month = '0'+month
+            if len(day) == 1:
+                day = '0'+day
+            date = year+month+day
+        elif isinstance(month, int):
+            if month < 10:
+                month = '0'+str(month)
+            if day < 10:
+                day = '0'+str(day)
+            date = str(year)+str(month)+str(day)
 
         # Find the data file to read in from the indexed MERRA2 data files
         fileNames = date_index.get(date, [])
