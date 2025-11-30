@@ -1,0 +1,54 @@
+---
+title: "Exploratory Regression"
+author: "A sad student"
+date: "27 October 2025"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, message=FALSE,warning=FALSE}
+library(knitr)
+library(tinytex)
+library(tidyverse)
+library(dplyr)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%",fig.align='center')
+```
+
+```{r}
+data <- read_csv("fire_data_2023.csv")
+
+glimpse(data)
+```
+
+
+```{r}
+model <- lm(SIZE_HA~SPECIFIC_HUMIDITY+TEMP+PRECIP_ICE+PRECIP_WATER+PRECIP_ICE+WIND+TSURF+GWETTOP+LHLAND + SHLAND+LAI+GRN+SWLAND+EVPTRNS+RZMC, data = data)
+summary(model)
+```
+```{r}
+plot(model)
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+
+filtered_data <- data %>%
+  filter(SIZE_HA <= 50)
+
+filtered_data <- filtered_data %>%
+  filter(SHLAND > 0)
+
+ggplot(filtered_data, aes(x = WIND, y = SIZE_HA)) +
+  geom_point()+
+  geom_smooth(formula=y~x,method="lm",se=FALSE,color="blue")+
+  labs(title="Association between ",
+       x="Width (cm)",
+       y="Weight (g)",
+       caption="Source: Brofeldt (1917)") +
+  theme_bw()
+```
+
