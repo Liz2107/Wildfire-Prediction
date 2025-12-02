@@ -9,7 +9,7 @@ from sklearn.calibration import calibration_curve
 import shap
 
 # Flag to indicate whether to only use natural fires (True) or fires of all causes (False)
-only_natural_flag = True
+only_natural_flag = False
 
 # Read in data
 data_2017 = pd.read_csv('fire_data_2017enriched2.csv', sep=',', header=0)
@@ -97,27 +97,26 @@ for fold_number, (training_index, validation_index) in enumerate(k_fold_cross_va
     # Pull the AUC and log loss scores from the model to print
     results = model.evals_result()
     print(f"\nFold {fold_number+1}:")
-    print("Test Spatial AUC:", np.mean(results['validation_0']['auc']))
-    print("Validation Spatial AUC:", np.mean(results['validation_1']['auc']))
-    print("Test Spatial LogLoss:", np.mean(results['validation_0']['logloss']))
-    print("Validation Spatial LogLoss:", np.mean(results['validation_1']['logloss']))
+    print("Test Spatial AUC:", round(np.mean(results['validation_0']['auc']),3))
+    print("Validation Spatial AUC:", round(np.mean(results['validation_1']['auc']),3))
+    print("Test Spatial LogLoss:", round(np.mean(results['validation_0']['logloss']),3))
+    print("Validation Spatial LogLoss:", round(np.mean(results['validation_1']['logloss']),3))
 
     # Make a list of the validation AUC scores and LogLoss scores
     area_under_curve_scores.append(np.mean(results['validation_1']['auc']))
     log_loss_scores.append(np.mean(results['validation_1']['logloss']))
 
 # Print the average AUC and LogLoss scores
-print("\nMean Spatial AUC:", np.mean(area_under_curve_scores))
-print("Mean Spatial LogLoss:", np.mean(log_loss_scores), '\n')
+print("\nMean Spatial AUC:", round(np.mean(area_under_curve_scores),3))
+print("Mean Spatial LogLoss:", round(np.mean(log_loss_scores),3), '\n')
 
 # Fit the model to the full data after using cross-validation to verify spatial robustness
 model.fit(predictor_data, fire_truth_data, sample_weight=weights)
 
 # Read in test data
-data_2016 = pd.read_csv('fire_data_2016enriched2.csv', sep=',', header=0)
+test_data = pd.read_csv('fire_data_2016enriched2.csv', sep=',', header=0)
 
 # Process test data to exclude missing values
-test_data = data_2016
 test_data = test_data[test_data['TSURF'] != -1]
 test_data = test_data[test_data['GWETTOP'] != -1]
 test_data = test_data[test_data['LHLAND'] != -1]
@@ -146,13 +145,13 @@ fire_truth_data_test = test_data['fire']
 fire_probability = model.predict_proba(predictor_data_test)[:,1]
 
 # If the probability of a fire is more than 50%, say the model does predict a fire
-fire_prediction = (fire_probability >= 0.5).astype(int)
+fire_prediction = (fire_probability > 0.5).astype(int)
 
 # Print out the resulting model AUC, precision, recall, and F1 score
-print("Test Data AUC:", roc_auc_score(fire_truth_data_test, fire_probability))
-print("Test Data Precision:", precision_score(fire_truth_data_test, fire_prediction))
-print("Test Data Recall:", recall_score(fire_truth_data_test, fire_prediction))
-print("Test Data F1 Score:", f1_score(fire_truth_data_test, fire_prediction))
+print("Test Data AUC:", round(roc_auc_score(fire_truth_data_test, fire_probability),3))
+print("Test Data Precision:", round(precision_score(fire_truth_data_test, fire_prediction),3))
+print("Test Data Recall:", round(recall_score(fire_truth_data_test, fire_prediction),3))
+print("Test Data F1 Score:", round(f1_score(fire_truth_data_test, fire_prediction),3))
 print("Test Data Confusion Matrix:\n", confusion_matrix(fire_truth_data_test, fire_prediction))
 
 # Calculate the precision and recall curve values of the model
