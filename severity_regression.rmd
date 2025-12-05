@@ -1,6 +1,6 @@
 ---
 title: "Exploratory Regression"
-author: "A sad student"
+author: "Liz Cutting"
 date: "27 October 2025"
 output:
   pdf_document: default
@@ -22,6 +22,19 @@ knitr::opts_chunk$set(out.width = "60%",fig.align='center')
 data <- read_csv("fire_data_2023.csv")
 
 glimpse(data)
+
+data <- na.omit(data)
+data$SIZE_HA <- as.numeric(data$SIZE_HA)
+h <- hist(data$SIZE_HA, plot = FALSE)   # compute histogram, but don’t plot
+
+plot(h$mids, log(h$counts),
+     type = "h", lwd = 10,
+     main = "Histogram of (log(Fire size))",
+     xlab = "Size (HA)",
+     ylab = "log(Count)",
+     col = "skyblue")
+
+
 ```
 
 
@@ -32,6 +45,10 @@ summary(model)
 ```{r}
 plot(model)
 ```
+
+This data assumes we have a normal distribution. But, we don't! See Q-Q plot. So, try finding outliers. When that doesn't hlep, try a log-normal by transforming the response. 
+
+
 ```{r}
 library(ggplot2)
 library(dplyr)
@@ -51,4 +68,186 @@ ggplot(filtered_data, aes(x = WIND, y = SIZE_HA)) +
        caption="Source: Brofeldt (1917)") +
   theme_bw()
 ```
+
+
+```{r}
+cleaned_data <- na.omit(data)
+data_cleaned <- cleaned_data %>% filter(SIZE_HA > 0)
+data2 <- data_cleaned %>% 
+        mutate(log_SIZE_HA = log(SIZE_HA))
+
+glimpse(data2)
+
+model <- lm(log_SIZE_HA~SPECIFIC_HUMIDITY+TEMP+PRECIP_ICE+PRECIP_WATER+PRECIP_ICE+WIND+TSURF+GWETTOP+LHLAND + SHLAND+LAI+GRN+SWLAND+EVPTRNS+RZMC, data = data2)
+summary(model)
+```
+
+The log of the RSE above was 10.07, so this is quite a large improvement. Check normamlity conditions:
+
+```{r}
+plot(model)
+
+```
+
+```{r}
+library(car)
+vif(model)
+
+
+coef_df <- tibble(
+  variable = c(
+    "SPECIFIC_HUMIDITY", "TEMP", "PRECIP_ICE", "PRECIP_WATER", "WIND",
+    "TSURF", "GWETTOP", "LHLAND", "SHLAND", "LAI", "GRN", "SWLAND",
+    "EVPTRNS", "RZMC"
+  ),
+  value = c(
+    9.805781, 12.134880, 1.653941, 1.696050, 1.686045,
+    5.933761, 33.974923, 29.080029, 11.374341, 2.897738,
+    1.517025, 25.168641, 9.287284, 23.210578
+  )
+)
+
+
+coef_df2 <- tibble(
+  variable = c(
+    "SPECIFIC_HUMIDITY", "TEMP", "PRECIP_ICE", "PRECIP_WATER", "WIND",
+    "TSURF", "GWETTOP", "LHLAND"
+  ),
+  value = c(
+    0.00531, 0.06649, 0.6697, 0.3788, 0.00395, 0.715, 0.0066, 0.0799
+  )
+)
+ggplot(coef_df2, aes(x = variable, y = value)) +
+  geom_col(fill = "steelblue") +
+  geom_hline(yintercept = 0.1, color="red", width=4)+
+  geom_hline(yintercept = 0.05, color="darkred", width=4)+
+  labs(
+    title = "Collinearity Analysis",
+    y = "p-value",
+    x = "Variable"
+  ) +
+  theme_bw()
+ggplot(coef_df2, aes(x = variable, y = value)) +
+  geom_col(fill = "steelblue") +
+  geom_hline(
+    data = data.frame(threshold = c(0.10, 0.05),
+                      label = c("0.10 Level", "0.05 Level")),
+    aes(yintercept = threshold, color = label, linetype = label),
+    linewidth = 1
+  ) +
+  scale_color_manual(values = c("0.10 Level" = "red", 
+                                "0.05 Level" = "darkred")) +
+  scale_linetype_manual(values = c("0.10 Level" = "dashed",
+                                   "0.05 Level" = "dotted")) +labs(
+    title = "Significant Variables in MLR",
+    y = "p-value",
+    x = "Variable",
+    color = "Threshold",
+    linetype = "Threshold"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+ggplot(coef_df, aes(x = reorder(variable, value), y = value)) +
+  geom_col(fill = "steelblue") +
+  geom_hline(yintercept = 12, color="red", width=4)+
+  coord_flip() +
+  labs(
+    title = "Collinearity Analysis",
+    y = "VIF Score",
+    x = "Variable"
+  ) +
+  theme_bw()
+
+```
+Wow, much better! This should be good enough. There is a right skew, but it's not a big deal. We see that when studying Cook's distance on the outliers, we don't have many that are considered too extreme statistically. 
+
+
+Let's test out full power-law method. 
+
+```{r}
+data_pl <- data_cleaned %>%
+    mutate(
+        log_SIZE = log(SIZE_HA),
+        across(c(SPECIFIC_HUMIDITY, TEMP, PRECIP_ICE, PRECIP_WATER, WIND,
+                 TSURF, GWETTOP, LHLAND, SHLAND, LAI, GRN, SWLAND, 
+                 EVPTRNS, RZMC), ~ log(.x + 1), .names = "log_{col}")
+    )
+
+model_powerlaw <- lm(log_SIZE ~ ., data = select(data_pl, starts_with("log_")))
+summary(model_powerlaw)
+plot(model_powerlaw)
+```
+
+
+This is basically the same result! Since we don't see better Adjusted R^2, we wouldn't change the model. However, we do note that the outliers might be managed even better. To confirm which model is better, we will make a decision based on 10-fold CV error: 
+
+```{r}
+library(caret)
+
+set.seed(303)
+
+cv_control <- trainControl(method = "cv", number = 10)
+
+cv_lognormal <- train(
+  log_SIZE_HA ~ SPECIFIC_HUMIDITY + TEMP + PRECIP_ICE + PRECIP_WATER + WIND +
+    TSURF + GWETTOP + LHLAND + SHLAND + LAI + GRN + SWLAND +
+    EVPTRNS + RZMC,
+  data = data2,
+  method = "lm",
+  trControl = cv_control,
+  metric = "RMSE"
+)
+# convert to fire size units (HA)
+exp(cv_lognormal$results$RMSE)
+
+
+```
+
+```{r}
+#use this to make the data more similar when doing CV for accuracy
+safe_log <- function(x) {
+  min_x <- min(x, na.rm = TRUE)
+  shift <- ifelse(min_x <= 0, abs(min_x) + 1e-6, 0)
+  log(x + shift)
+}
+
+data_pl <- data_cleaned %>%
+  mutate(
+    log_SIZE = log(SIZE_HA),
+    across(
+      c(SPECIFIC_HUMIDITY, TEMP, PRECIP_ICE, PRECIP_WATER, WIND,
+        TSURF, GWETTOP, LHLAND, SHLAND, LAI, GRN, SWLAND,
+        EVPTRNS, RZMC),
+      ~ safe_log(.x),
+      .names = "log_{col}"
+    )
+  )
+
+model_powerlaw <- lm(
+  log_SIZE ~ .,
+  data = select(data_pl, starts_with("log_"))
+)
+
+summary(model_powerlaw)
+
+set.seed(303)
+
+cv_powerlaw <- train(
+  log_SIZE ~ .,
+  data = select(data_pl, starts_with("log_")),
+  method = "lm",
+  trControl = cv_control,
+  metric = "RMSE"
+)
+
+exp(cv_powerlaw$results$RMSE)
+
+
+```
+It looks like a log-normal distribution is  best! 
+
 
