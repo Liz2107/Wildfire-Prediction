@@ -11,7 +11,7 @@ import shap
 # Flag to indicate whether to only use natural fires (True) or fires of all causes (False)
 only_natural_flag = False
 
-# Read in data
+# Read in data, association error with 2013-15 data so ignore those files for now
 data_2017 = pd.read_csv('fire_data_2017enriched2.csv', sep=',', header=0)
 data_2018 = pd.read_csv('fire_data_2018enriched2.csv', sep=',', header=0)
 data_2019 = pd.read_csv('fire_data_2019enriched2.csv', sep=',', header=0)
